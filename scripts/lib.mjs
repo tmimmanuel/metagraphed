@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Agent } from "undici";
 import {
   ARTIFACT_STORAGE_TIERS,
@@ -13,7 +14,11 @@ import {
 } from "../src/artifact-storage.mjs";
 import { sanitizeChainText } from "./lib/formatting.mjs";
 
-export const repoRoot = new URL("..", import.meta.url).pathname;
+// Resolve via fileURLToPath rather than `new URL("..").pathname` so the repo
+// root is a valid native path on every OS. On Windows the bare `.pathname` form
+// yields a leading-slash, drive-prefixed string (e.g. `/E:/work/...`) that
+// `path.join` mangles into `E:\E:\work\...`, breaking every artifact read.
+export const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 export const publicMetagraphRoot = path.join(repoRoot, "public/metagraph");
 export const r2StagingRoot = path.join(repoRoot, R2_STAGING_RELATIVE_ROOT);
 export const generatedSourceRoot = path.join(repoRoot, "dist/metagraph-source");
@@ -1237,6 +1242,20 @@ export function normalizePublicHttpUrl(value) {
 
   const protocol = new URL(normalized).protocol;
   return ["http:", "https:"].includes(protocol) ? normalized : null;
+}
+
+export function evidenceSourceUrls(record = null) {
+  const rawSourceUrls = Array.isArray(record?.source_urls)
+    ? record.source_urls
+    : null;
+  const rawFallback =
+    rawSourceUrls === null && typeof record?.source_url === "string"
+      ? [record.source_url]
+      : [];
+  const urls = [...(rawSourceUrls || rawFallback)]
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter(Boolean);
+  return [...new Set(urls)];
 }
 
 // Placeholder/junk identity URLs some subnets carry on-chain (e.g. the
